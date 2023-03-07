@@ -25,8 +25,14 @@ def generate_all_partitions(M):
     return partitions
 
 
-def error(partitions, probs, z_true):
-    mean = np.sum(np.multiply(partitions, probs.reshape((-1, 1))), axis=0)
-    mean = (mean - np.min(mean)) / (np.max(mean) - np.min(mean))
-    true = (z_true - np.min(z_true)) / (np.max(z_true) - np.min(z_true))
-    return mean, np.sum(np.square(mean - true))
+def normalise(x):
+    return (x - np.min(x)) / (np.max(x) - np.min(x))
+
+
+def posterior_mean(partitions, probs):
+    return np.sum(np.multiply(partitions, probs.reshape((-1, 1))), axis=0)
+
+
+def error(z, z_true):
+    z, true = normalise(z), normalise(z_true)
+    return np.sum(np.square(z - true))

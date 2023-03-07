@@ -1,12 +1,15 @@
 from collections import Counter
+import time
 
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.stats import beta, bernoulli, binom, betabinom
 from scipy.special import gamma
-import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 from tqdm import tqdm
 
-from utils import generate_all_partitions, error
+from utils import generate_all_partitions, posterior_mean, error
 
 
 def generate_observations(M, N, z, theta):
@@ -38,6 +41,8 @@ def posterior(O, partitions, a, b, c):
 
 
 def main():
+    start = time.time()
+
     M = 10  # number of agents
     a, b, c = 0.1, 0.1, 1  #  parameters for beta prior and CRP
     z_true = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])  # ground truth group assignments
@@ -47,18 +52,38 @@ def main():
     partitions = generate_all_partitions(M)
     print(f"generated {len(partitions)} partitions")
 
-    N_vals, means, repeats = [1, 3, 5, 10, 15, 20], [], 3
-    errors = np.zeros((repeats, len(N_vals)))
+    N_vals, means, errors, repeats = [1, 3, 5, 10, 15, 20], [], [], 5
 
-    for N in tqdm(N_vals):
-        for i in range(repeats):
+    for i in tqdm(range(len(N_vals))):
+        tmp = np.zeros((repeats, M))
+        for j in range(repeats):
             probs = posterior(
-                generate_observations(M, N, z_true, theta_true), partitions, a, b, c
+                generate_observations(M, N_vals[i], z_true, theta_true), partitions, a, b, c
             )
-            _, e = error(partitions, probs, z_true)
-            errors[i, N_vals.index(N)] = e
+            tmp[j] = posterior_mean(partitions, probs)
+            errors.append(error(tmp[j], z_true))
+        means.append(np.mean(tmp, axis=0))
 
-    plt.plot(N_vals, np.mean(errors, axis=0))
+    print(f"total time taken: {time.time() - start} seconds")
+
+    sns.relplot(
+        data=pd.DataFrame(
+            {"N": N_vals, "error": np.array([error(z, z_true) for z in means])}
+        ),
+        x="N",
+        y="error",
+        kind="line",
+    )
+
+    plt.show()
+
+    sns.relplot(
+        data=pd.DataFrame({"N": np.repeat(N_vals, repeats), "error": errors}),
+        x="N",
+        y="error",
+        kind="line",
+    )
+
     plt.show()
 
 
