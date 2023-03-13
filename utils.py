@@ -35,4 +35,4 @@ def posterior_mean(partitions, probs):
 
 def error(z, z_true):
     z, true = normalise(z), normalise(z_true)
-    return np.sum(np.square(z - true))
+    return np.square(z - true).mean()
