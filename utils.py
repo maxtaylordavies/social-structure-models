@@ -24,13 +24,24 @@ def generate_all_partitions(M):
 
     return partitions
 
+def random_partition(K, M):
+    return np.random.choice(K, size=M)
 
+def boltzmann(r, beta):
+    p = np.exp(r / beta)
+    return p / np.sum(p)
+
+# normalise a numpy ndarray to the range [0, 1]
 def normalise(x):
     return (x - np.min(x)) / (np.max(x) - np.min(x))
 
 
 def posterior_mean(partitions, probs):
     return np.sum(np.multiply(partitions, probs.reshape((-1, 1))), axis=0)
+
+
+def map_estimate(partitions, probs):
+    return partitions[np.argmax(probs)]
 
 
 def error(z, z_true):

@@ -1,110 +1,157 @@
 from collections import Counter
-from itertools import product
-import time
 
+# import jax.numpy as np
+# from jax import random
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import betabinom
 from scipy.special import gamma
 import pandas as pd
-import seaborn as sns
 from tqdm import tqdm
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-from utils import generate_all_partitions, posterior_mean, error
+from utils import (
+    random_partition,
+    generate_all_partitions,
+    posterior_mean,
+    map_estimate,
+    error,
+)
 
 sns.set_theme()
 
-
-def generate_observations(M, N, z, theta):
-    return (np.random.random(size=(M, N)) < theta[z].reshape((-1, 1))).astype(int)
+# key = random.PRNGKey(0)
 
 
-def crp(z, c):
+def generate_observations(config, N):
+    cum_p = np.tile(np.cumsum(config["theta"][config["z"]], axis=-1), (N, 1, 1)).transpose(
+        [1, 0, 2]
+    )
+    return np.argmax(np.random.uniform(size=(config["M"], N, 1)) < cum_p, axis=-1)
+
+
+def prior(z, c):
     counts = Counter(z)
     prod = np.prod([gamma(counts[k]) for k in counts])
     coeff = ((c ** len(counts)) * gamma(c)) / gamma(c + len(z))
     return coeff * prod
 
 
-def likelihood(O, z, a, b):
+def dirichlet_multinomial(counts, T, L, g, log=True):
+    coeff = (gamma(L * g) * gamma(T + 1)) / gamma(T + (L * g))
+    prods = np.prod(gamma(counts + g) / (gamma(g) * gamma(counts + 1)), axis=1)
+
+    tmp = coeff * prods
+    return np.sum(np.log(tmp)) if log else np.prod(tmp)
+
+
+def likelihood(O, z, L, g, log=True):
+    # likelihood of each group is given by multinomial-dirichlet distribution
+    def group_likelihood(k, T_k):
+        return dirichlet_multinomial(
+            np.array([np.sum(O[z == k] == c, axis=0) for c in range(L)]), T_k, L, g, log=log
+        )
+
+    # likelihood of partition is product of likelihoods of each group
     totals = Counter(z)
-    return np.prod(
-        [np.prod(betabinom.pmf(np.sum(O[z == k], axis=0), totals[k], a, b)) for k in totals]
+    likelihoods = [group_likelihood(k, totals[k]) for k in totals]
+
+    return -np.sum(likelihoods) if log else np.prod(likelihoods)
+
+
+def posterior(O, partitions, config):
+    likelihoods = np.array(
+        [likelihood(O, z, config["L"], config["g"], log=config["log"]) for z in partitions]
+    )
+    z_priors = np.array([prior(z, config["c"]) for z in partitions])
+
+    post = (
+        likelihoods + np.log(z_priors)
+        if config["log"]
+        else np.multiply(likelihoods, z_priors)
     )
 
+    if not config["log"]:
+        return post / np.sum(post)
 
-def posterior(O, partitions, a, b, c):
-    likelihoods = np.array([likelihood(O, z, a, b) for z in partitions])
-    z_priors = np.array([crp(z, c) for z in partitions])
-    probabilities = np.multiply(likelihoods, z_priors)
-    return probabilities / np.sum(probabilities)
-
-
-def evaluate_binary_choice_model():
-    start = time.time()
-
-    M = 10  # number of agents
-    z_true = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1])  # ground truth group assignments
-    theta_true = np.array([0.1, 0.9])  # ground truth latent group parameters
-
-    partitions = generate_all_partitions(M)
-    print(f"generated {len(partitions)} partitions")
-
-    a_vals, N_vals, c_vals = (
-        [0.01, 0.1, 0.3, 0.5, 1.0],
-        [1, 5, 10, 20, 50, 100],
-        [0.1, 1.0, 10.0],
-    )
-    repeats, results = 5, pd.DataFrame({"alpha": [], "N": [], "c": [], "MSE": []})
-
-    obs = [generate_observations(M, N_vals[-1], z_true, theta_true) for _ in range(repeats)]
-
-    # evaluate model for different values of alpha, N, c
-    param_grid = list(product(a_vals, N_vals, c_vals))
-    print(f"evaluating model for {len(param_grid) * repeats} parameter combinations")
-    for alpha, N, c in tqdm(param_grid):
-        for rep in range(repeats):
-            probs = posterior(obs[rep][:, :N], partitions, alpha, alpha, c)
-            z = posterior_mean(partitions, probs)
-            results = results.append(
-                {"alpha": alpha, "N": N, "c": c, "MSE": error(z, z_true)}, ignore_index=True,
-            )
-
-    print(f"total time taken: {time.time() - start} seconds")
-
-    # save results to file
-    results.to_pickle("binary_choice.pkl")
+    post = np.exp(post)
+    return post / np.sum(post)
 
 
-    # plot results
-    pallete = sns.color_palette("cubehelix", len(a_vals))
-    fig, axes = plt.subplots(1, len(c_vals), figsize=(12, 4), sharex=True, sharey=True)
-    for i, c in enumerate(c_vals):
-        ax = sns.lineplot(
-            data=results[results["c"] == c],
-            x="N",
-            y="MSE",
-            hue="alpha",
-            errorbar="se",
-            palette=pallete,
-            ax=axes[i],
-            legend=i == len(c_vals) - 1,
-        )
-        ax.set(
-            xlabel="Length of observation history",
-            ylabel="Mean squared error",
-            title=f"c = {c}",
-        )
-        if i == len(c_vals) - 1:
-            sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+def create_theta(config):
+    theta = (config["epsilon"]) / (config["L"] - 1) * np.ones((config["L"], config["L"]))
+    for c in range(config["L"]):
+        theta[c, c] = 1 - config["epsilon"]
+    return theta
 
-    fig.suptitle("Performance of binary choice model")
-    plt.savefig("binary_choice.png", bbox_inches="tight")
+
+def evaluate_discrete_choice_model(config):
+    results = {"epsilon": [], "N": [], "mean": [], "map": [], "err_mean": [], "err_map": []}
+
+    if config["sample"]:
+        partitions = [random_partition(3, config["M"]) for _ in range(1000)]
+        partitions = np.array(partitions)
+    else:
+        partitions = generate_all_partitions(config["M"])
+
+    N_vals, epsilon_vals = config["N"], config["epsilons"]
+
+    for _ in tqdm(range(config["repeats"])):
+        for epsilon in epsilon_vals:
+            config["epsilon"] = epsilon
+            config["theta"] = create_theta(config)
+            config["z"] = random_partition(3, config["M"])
+
+            if config["sample"]:
+                partitions[-1] = config["z"]
+
+            O = generate_observations(config, N_vals[-1])
+
+            for N in N_vals:
+                post = posterior(O[:, :N], partitions, config)
+                mean, _map = posterior_mean(partitions, post), map_estimate(partitions, post)
+
+                results["epsilon"].append(epsilon)
+                results["N"].append(N)
+                results["mean"].append(mean)
+                results["map"].append(_map)
+                results["err_mean"].append(error(mean, config["z"]))
+                results["err_map"].append(error(_map, config["z"]))
+
+    return pd.DataFrame(results)
 
 
 def main():
-    evaluate_binary_choice_model()
+    config = {
+        "M": 10,  # number of agents
+        "N": [1, 2, 3, 5, 10, 20, 50],  # number of observations per agent
+        "L": 3,  # choice size,
+        "epsilons": [0, 0.05, 0.1, 0.2, 0.5],
+        "g": 2,  # parameter for dirichlet prior over theta
+        "c": 1,  # concentration parameter for CRP prior
+        "sample": True,  # whether to randomly sample the set of partitions used for evaluation
+        "log": True,  # whether to use logs for intermediate probability computations
+        "repeats": 30,  # how many different true partitions to evaluate the model over
+    }
 
+    results = evaluate_discrete_choice_model(config)
+
+    ax = sns.lineplot(
+        data=results,
+        x="N",
+        y="err_mean",
+        hue="epsilon",
+        palette=sns.color_palette("viridis", len(config["epsilons"])),
+    )
+    ax.set(
+        xlabel="Length of observation history",
+        ylabel="Mean squared error",
+        title="Performance of Dirichlet-Multinomial model",
+    )
+    sns.move_legend(ax, "upper left", bbox_to_anchor=(1, 1))
+
+    for fmt in ["png", "svg", "pdf"]:
+        plt.savefig(f"discrete_choice.{fmt}")
+    plt.show()
 
 
 if __name__ == "__main__":
