@@ -29,7 +29,7 @@ def random_partition(K, M):
 
 def boltzmann(r, beta):
     p = np.exp(r / beta)
-    return p / np.sum(p)
+    return p / np.sum(p, axis=0, keepdims=True)
 
 # normalise a numpy ndarray to the range [0, 1]
 def normalise(x):

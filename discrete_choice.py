@@ -10,6 +10,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from utils import (
+    boltzmann,
     random_partition,
     generate_all_partitions,
     posterior_mean,
@@ -23,9 +24,9 @@ sns.set_theme()
 
 
 def generate_observations(config, N):
-    cum_p = np.tile(np.cumsum(config["theta"][config["z"]], axis=-1), (N, 1, 1)).transpose(
-        [1, 0, 2]
-    )
+    theta = boltzmann(config["r"], config["beta"])
+
+    cum_p = np.tile(np.cumsum(theta[config["z"]], axis=-1), (N, 1, 1)).transpose([1, 0, 2])
     return np.argmax(np.random.uniform(size=(config["M"], N, 1)) < cum_p, axis=-1)
 
 
@@ -77,15 +78,8 @@ def posterior(O, partitions, config):
     return post / np.sum(post)
 
 
-def create_theta(config):
-    theta = (config["epsilon"]) / (config["L"] - 1) * np.ones((config["L"], config["L"]))
-    for c in range(config["L"]):
-        theta[c, c] = 1 - config["epsilon"]
-    return theta
-
-
 def evaluate_discrete_choice_model(config):
-    results = {"epsilon": [], "N": [], "mean": [], "map": [], "err_mean": [], "err_map": []}
+    results = {"beta": [], "N": [], "mean": [], "map": [], "err_mean": [], "err_map": []}
 
     if config["sample"]:
         partitions = [random_partition(3, config["M"]) for _ in range(1000)]
@@ -93,12 +87,12 @@ def evaluate_discrete_choice_model(config):
     else:
         partitions = generate_all_partitions(config["M"])
 
-    N_vals, epsilon_vals = config["N"], config["epsilons"]
+    config["r"] = np.eye(config["L"])
+    N_vals, beta_vals = config["N"], config["betas"]
 
     for _ in tqdm(range(config["repeats"])):
-        for epsilon in epsilon_vals:
-            config["epsilon"] = epsilon
-            config["theta"] = create_theta(config)
+        for beta in beta_vals:
+            config["beta"] = beta
             config["z"] = random_partition(3, config["M"])
 
             if config["sample"]:
@@ -110,7 +104,7 @@ def evaluate_discrete_choice_model(config):
                 post = posterior(O[:, :N], partitions, config)
                 mean, _map = posterior_mean(partitions, post), map_estimate(partitions, post)
 
-                results["epsilon"].append(epsilon)
+                results["beta"].append(beta)
                 results["N"].append(N)
                 results["mean"].append(mean)
                 results["map"].append(_map)
@@ -123,14 +117,14 @@ def evaluate_discrete_choice_model(config):
 def main():
     config = {
         "M": 10,  # number of agents
-        "N": [1, 2, 3, 5, 10, 20, 50],  # number of observations per agent
+        "N": [0, 1, 2, 3, 5, 10, 20, 50],  # number of observations per agent
         "L": 3,  # choice size,
-        "epsilons": [0, 0.05, 0.1, 0.2, 0.5],
+        "betas": [0.01, 0.1, 0.2, 0.3, 0.5, 1.0],  # boltzmann temperature
         "g": 2,  # parameter for dirichlet prior over theta
         "c": 1,  # concentration parameter for CRP prior
-        "sample": True,  # whether to randomly sample the set of partitions used for evaluation
+        "sample": False,  # whether to randomly sample the set of partitions used for evaluation
         "log": True,  # whether to use logs for intermediate probability computations
-        "repeats": 30,  # how many different true partitions to evaluate the model over
+        "repeats": 5,  # how many different true partitions to evaluate the model over
     }
 
     results = evaluate_discrete_choice_model(config)
@@ -139,8 +133,8 @@ def main():
         data=results,
         x="N",
         y="err_mean",
-        hue="epsilon",
-        palette=sns.color_palette("viridis", len(config["epsilons"])),
+        hue="beta",
+        palette=sns.color_palette("viridis", len(config["betas"])),
     )
     ax.set(
         xlabel="Length of observation history",
