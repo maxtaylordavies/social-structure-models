@@ -5,25 +5,18 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import betabinom
-from scipy.special import gamma
 import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from utils import generate_all_partitions, posterior_mean, error
+from src.distributions import crp
+from src.utils import generate_all_partitions, posterior_mean, error
 
 sns.set_theme()
 
 
 def generate_observations(M, N, z, theta):
     return (np.random.random(size=(M, N)) < theta[z].reshape((-1, 1))).astype(int)
-
-
-def prior(z, c):
-    counts = Counter(z)
-    prod = np.prod([gamma(counts[k]) for k in counts])
-    coeff = ((c ** len(counts)) * gamma(c)) / gamma(c + len(z))
-    return coeff * prod
 
 
 def likelihood(O, z, a, b):
@@ -35,7 +28,7 @@ def likelihood(O, z, a, b):
 
 def posterior(O, partitions, a, b, c):
     likelihoods = np.array([likelihood(O, z, a, b) for z in partitions])
-    z_priors = np.array([prior(z, c) for z in partitions])
+    z_priors = np.array([crp(z, c) for z in partitions])
     probabilities = np.multiply(likelihoods, z_priors)
     return probabilities / np.sum(probabilities)
 
@@ -67,14 +60,14 @@ def evaluate_binary_choice_model():
             probs = posterior(obs[rep][:, :N], partitions, alpha, alpha, c)
             z = posterior_mean(partitions, probs)
             results = results.append(
-                {"alpha": alpha, "N": N, "c": c, "MSE": error(z, z_true)}, ignore_index=True,
+                {"alpha": alpha, "N": N, "c": c, "MSE": error(z, z_true)},
+                ignore_index=True,
             )
 
     print(f"total time taken: {time.time() - start} seconds")
 
     # save results to file
     results.to_pickle("binary_choice.pkl")
-
 
     # plot results
     pallete = sns.color_palette("cubehelix", len(a_vals))

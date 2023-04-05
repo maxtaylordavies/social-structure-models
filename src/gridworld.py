@@ -1,0 +1,95 @@
+import time
+
+import numpy as np
+
+
+class Gridworld:
+    def __init__(self, width, height, goals, move_cost=0, gamma=0.9):
+        super().__init__()
+        self.width = width
+        self.height = height
+        self.move_cost = move_cost
+        self.gamma = gamma
+
+        self.state_dim, self.action_dim = self.height * self.width, 4
+
+        self._reward_map = {self.state_to_idx(s): 0 for s in goals}
+        self._action_map = {
+            0: np.array([0, -1]),  # left
+            1: np.array([-1, 0]),  # up
+            2: np.array([0, 1]),  # right
+            3: np.array([1, 0]),  # down
+        }
+
+        self._create_transition_matrix()
+
+    def _create_transition_matrix(self):
+        self.P = np.zeros((self.state_dim, self.action_dim, self.state_dim))
+
+        for row in range(self.height):
+            for col in range(self.width):
+                s = np.array([row, col])
+
+                if self._is_terminal(s):
+                    continue
+
+                for a in self._action_map.keys():
+                    s_next = s + self._action_map[a]
+
+                    if not self._is_in_grid(s_next):
+                        continue
+
+                    self.P[self.state_to_idx(s), a, self.state_to_idx(s_next)] = 1.0
+
+    def _create_reward_matrix(self):
+        self.R = np.zeros((self.state_dim, self.action_dim, self.state_dim))
+
+        for row in range(self.height):
+            for col in range(self.width):
+                s = np.array([row, col])
+
+                if self._is_terminal(s):
+                    continue
+
+                for a in self._action_map.keys():
+                    s_next = s + self._action_map[a]
+
+                    if not self._is_in_grid(s_next):
+                        continue
+
+                    self.R[
+                        self.state_to_idx(s), a, self.state_to_idx(s_next)
+                    ] = self._get_reward(s_next)
+
+    def _is_in_grid(self, s):
+        return 0 <= s[0] < self.height and 0 <= s[1] < self.width
+
+    def _is_terminal(self, s):
+        return self.state_to_idx(s) in self._reward_map
+
+    def _get_reward(self, s):
+        return self._reward_map.get(self.state_to_idx(s), self.move_cost)
+
+    def state_to_idx(self, s):
+        return s[0] * self.width + s[1]
+
+    def act(self, s, a):
+        if self._is_terminal(s):
+            return s, True
+
+        s_next = s + self._action_map[a]
+        if not self._is_in_grid(s_next):
+            s_next = s
+
+        return s_next, self._is_terminal(s_next)
+
+    def solve_q_values(self, rewards, theta=0.0001):
+        self._reward_map = {s: r for (s, r) in zip(self._reward_map.keys(), rewards)}
+        self._create_reward_matrix()
+
+        Q, delta = np.zeros((self.state_dim, self.action_dim)), np.inf
+        while delta >= theta:
+            q = Q.copy()
+            Q = (self.P * (self.R + (self.gamma * q.max(axis=1)))).sum(axis=2)
+            delta = abs(q - Q).max()
+        return Q

@@ -24,16 +24,40 @@ def generate_all_partitions(M):
 
     return partitions
 
-def random_partition(K, M):
-    return np.random.choice(K, size=M)
 
-def boltzmann(r, beta):
-    p = np.exp(r / beta)
-    return p / np.sum(p, axis=0, keepdims=True)
+def random_partition(K, M):
+    return order_partition(np.random.choice(K, size=M))
+
+
+def order_partition(z):
+    # return a new partition with ordered clusters
+    # e.g. [2, 1, 1, 0, 0, 0] -> [0, 1, 1, 2, 2, 2]
+    firsts = {}
+    for i, k in enumerate(z):
+        if k not in firsts:
+            firsts[k] = i
+
+    unique, new = sorted(firsts, key=firsts.get), np.zeros_like(z)
+    for i, k in enumerate(unique):
+        new[z == k] = i
+
+    return new
+
+
+def create_reward_functions(L, ratio):
+    base = np.array([1 * (ratio**i) for i in range(L)])
+    # base /= np.sum(base)
+
+    r = np.zeros((L, L))
+    for i in range(L):
+        r[i] = np.roll(base, i)
+
+    return r
+
 
 # normalise a numpy ndarray to the range [0, 1]
 def normalise(x):
-    return (x - np.min(x)) / (np.max(x) - np.min(x))
+    return np.nan_to_num((x - np.min(x)) / (np.max(x) - np.min(x)))
 
 
 def posterior_mean(partitions, probs):
@@ -41,9 +65,9 @@ def posterior_mean(partitions, probs):
 
 
 def map_estimate(partitions, probs):
-    return partitions[np.argmax(probs)]
+    return order_partition(partitions[np.argmax(probs)])
 
 
 def error(z, z_true):
-    z, true = normalise(z), normalise(z_true)
-    return np.square(z - true).mean()
+    z, z_true = normalise(z), normalise(z_true)
+    return np.square(z - z_true).mean()
