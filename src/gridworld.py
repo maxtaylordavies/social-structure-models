@@ -30,14 +30,11 @@ class Gridworld:
             for col in range(self.width):
                 s = np.array([row, col])
 
-                if self._is_terminal(s):
-                    continue
-
                 for a in self._action_map.keys():
                     s_next = s + self._action_map[a]
 
                     if not self._is_in_grid(s_next):
-                        continue
+                        s_next = s
 
                     self.P[self.state_to_idx(s), a, self.state_to_idx(s_next)] = 1.0
 
@@ -48,14 +45,11 @@ class Gridworld:
             for col in range(self.width):
                 s = np.array([row, col])
 
-                if self._is_terminal(s):
-                    continue
-
                 for a in self._action_map.keys():
                     s_next = s + self._action_map[a]
 
                     if not self._is_in_grid(s_next):
-                        continue
+                        s_next = s
 
                     self.R[
                         self.state_to_idx(s), a, self.state_to_idx(s_next)

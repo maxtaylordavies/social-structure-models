@@ -2,11 +2,12 @@ import numpy as np
 from scipy.stats import mode
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from src.gridworld import Gridworld
-from src.agent import Population
+from src.agent import Agent, Population
 from src.modelling import evaluate_model
-from src.utils import create_reward_functions
+from src.utils import create_reward_functions, normalise
 from scripts.discrete_choice import posterior
 
 
@@ -32,6 +33,52 @@ def generate_observations(config):
     return O
 
 
+def visualise_q_values(config):
+    reward_funcs = [np.array([10, 10, 10])] + [
+        np.roll(np.array([100, 10, 1]), i) for i in range(3)
+    ]
+    Q_tables = []
+    for r in reward_funcs:
+        agent = Agent(r=r)
+        _ = agent.get_action(world=config["world"], s=np.array([5, 5]), beta=1)
+        Q_tables.append(agent.Q)
+        agent.reset()
+
+    # fig, axs = plt.subplots(2, 2)
+    # actions = ["Left", "Up", "Right", "Down"]
+    # for i in range(4):
+    #     ax = axs[i // 2, i % 2]
+    #     vals = agent.Q[:, i].reshape(6, 11)
+    #     sns.heatmap(vals, cbar=False, xticklabels=False, yticklabels=False, ax=ax)
+    #     ax.set_title(actions[i])
+    # plt.show()
+
+    fig, axs = plt.subplots(2, len(Q_tables))
+    for i, Q in enumerate(Q_tables):
+        V = normalise(Q.max(axis=1).reshape(6, 11))
+        sns.heatmap(V, cbar=True, xticklabels=False, yticklabels=False, ax=axs[0, i])
+
+        a_stars = Q.argmax(axis=1).reshape(6, 11)
+        sns.heatmap(
+            a_stars,
+            cbar=True,
+            # cmap=sns.color_palette("Set2", 4),
+            cmap=sns.color_palette("ch:s=0.4,r=-1", 4),
+            vmin=0,
+            vmax=4,
+            xticklabels=False,
+            yticklabels=False,
+            ax=axs[1, i],
+        )
+
+    colorbar = axs[1, -1].collections[0].colorbar
+    colorbar.set_ticks([0.5, 1.5, 2.5, 3.5])
+    colorbar.set_ticklabels(["Left", "Up", "Right", "Down"])
+
+    fig.set_tight_layout(True)
+    plt.show()
+
+
 def main():
     config = {
         "M": 10,  # number of agents
@@ -49,11 +96,13 @@ def main():
         "repeats": 100,  # how many different true partitions to evaluate the model over
     }
     config["R"] = create_reward_functions(config["Ltot"], config["ratio"])
+
     config["world"] = Gridworld(
         height=6,
         width=11,
         goals=[(5, 0), (0, 5), (5, 10)],
         move_cost=-1,
+        gamma=0.9,
     )
 
     results = evaluate_model(
