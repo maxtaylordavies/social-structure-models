@@ -24,7 +24,9 @@ def generate_observations(config):
         trial_probs.append(np.cumsum(tmp, axis=-1))
     cum_p = np.stack(trial_probs).transpose([1, 0, 2])  # (M, N, L)
 
-    return np.argmax(np.random.uniform(size=(config["M"], config["N"], 1)) < cum_p, axis=-1)
+    obs = np.argmax(np.random.uniform(size=(config["M"], config["N"], 1)) < cum_p, axis=-1)
+    print(obs)
+    return obs
 
 
 def likelihood(O, z, L, g, log=True):
@@ -41,9 +43,9 @@ def likelihood(O, z, L, g, log=True):
     return -np.sum(likelihoods) if log else np.prod(likelihoods)
 
 
-def posterior(O, partitions, config, priors=None):
+def posterior(O, partitions, config, priors=None, l_func=likelihood):
     likelihoods = np.array(
-        [likelihood(O, z, config["L"], config["g"], log=config["log"]) for z in partitions]
+        [l_func(O, z, config["L"], config["g"], log=config["log"]) for z in partitions]
     )
 
     if priors is None:
@@ -51,10 +53,9 @@ def posterior(O, partitions, config, priors=None):
 
     post = likelihoods + np.log(priors) if config["log"] else np.multiply(likelihoods, priors)
 
-    if not config["log"]:
-        return post / np.sum(post)
+    if config["log"]:
+        post = np.exp(post - np.max(post))
 
-    post = np.exp(post)
     return post / np.sum(post)
 
 
@@ -72,7 +73,7 @@ def main():
         "sample": True,  # whether to randomly sample the set of partitions used for evaluation
         "log": True,  # whether to use logs for intermediate probability computations
         "update_batch_size": 5,  # batch size (num observations) for updating the posterior
-        "repeats": 100,  # how many different true partitions to evaluate the model over
+        "repeats": 5,  # how many different true partitions to evaluate the model over
     }
 
     results = evaluate_model(config, generate_observations, posterior)

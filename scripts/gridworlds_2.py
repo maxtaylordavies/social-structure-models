@@ -11,7 +11,7 @@ from src.utils import create_reward_functions, normalise
 from scripts.discrete_choice import posterior
 
 
-def generate_observations(config):
+def generate_observations(config, T=5):
     O = np.zeros((config["M"], config["N"]))
 
     for n in range(config["N"]):
@@ -26,7 +26,7 @@ def generate_observations(config):
             world=config["world"],
             beta=config["beta"],
             start_pos=np.array([5, 5]),
-            T=5,
+            T=T,
         )  # shape (M, 5)
         O[:, n] = mode(traj, axis=1)[0].squeeze()
 
@@ -82,21 +82,21 @@ def visualise_q_values(config):
 def main():
     config = {
         "M": 10,  # number of agents
-        "N": 50,  # number of observations per agent
+        "N": 50,  # number of trajectories per agent
         "K": 2,  # number of true groups
         "Ltot": 4,  # total number of options available
         "L": 3,  # number of options available per trial
-        "betas": [0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 10],  # boltzmann2d temperature
+        "betas": [0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 10],  # boltzmann temperature
         "ratio": 10,  # choice preference ratio
         "g": 2,  # parameter for dirichlet prior over theta
         "c": 1,  # concentration parameter for CRP prior
         "sample": True,  # whether to randomly sample the set of partitions used for evaluation
         "log": True,  # whether to use logs for intermediate probability computations
         "update_batch_size": 5,  # batch size (num observations) for updating the posterior
-        "repeats": 100,  # how many different true partitions to evaluate the model over
+        "repeats": 10,  # how many different true partitions to evaluate the model over
     }
-    config["R"] = create_reward_functions(config["Ltot"], config["ratio"])
 
+    config["R"] = create_reward_functions(config["Ltot"], config["ratio"])
     config["world"] = Gridworld(
         height=6,
         width=11,

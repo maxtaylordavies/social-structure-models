@@ -58,24 +58,24 @@ class Gridworld:
     def _is_in_grid(self, s):
         return 0 <= s[0] < self.height and 0 <= s[1] < self.width
 
-    def _is_terminal(self, s):
-        return self.state_to_idx(s) in self._reward_map
-
     def _get_reward(self, s):
         return self._reward_map.get(self.state_to_idx(s), self.move_cost)
 
     def state_to_idx(self, s):
         return s[0] * self.width + s[1]
 
+    def is_terminal(self, s):
+        return self.state_to_idx(s) in self._reward_map
+
     def act(self, s, a):
-        if self._is_terminal(s):
+        if self.is_terminal(s):
             return s, True
 
         s_next = s + self._action_map[a]
         if not self._is_in_grid(s_next):
             s_next = s
 
-        return s_next, self._is_terminal(s_next)
+        return s_next, self.is_terminal(s_next)
 
     def solve_q_values(self, rewards, theta=0.0001):
         self._reward_map = {s: r for (s, r) in zip(self._reward_map.keys(), rewards)}

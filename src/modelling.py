@@ -8,28 +8,40 @@ from src.utils import (
     posterior_mean,
     map_estimate,
     error,
+    log,
 )
 
 
-def evaluate_model(config, gen_obs_func, posterior_func):
+def evaluate_model(
+    config,
+    gen_obs_func,
+    posterior_func,
+    partitions=None,
+    true_partitions=None,
+    plot_func=None,
+):
     results = {"beta": [], "N": [], "mean": [], "map": [], "err_mean": [], "err_map": []}
 
-    if config["sample"]:
-        partitions = [random_partition(config["K"], config["M"]) for _ in range(1000)]
-        partitions = np.array(partitions)
-    else:
-        partitions = generate_all_partitions(config["M"])
+    if partitions is None:
+        if config["sample"]:
+            partitions = [random_partition(config["K"], config["M"]) for _ in range(1000)]
+            partitions = np.array(partitions)
+        else:
+            partitions = generate_all_partitions(config["M"])
+
+    if true_partitions is None:
+        true_partitions = [random_partition(config["K"], config["M"]) for _ in range(config["repeats"])]
 
     beta_vals = config["betas"]
-    true_zs = [random_partition(config["K"], config["M"]) for _ in range(config["repeats"])]
 
     for rep in tqdm(range(config["repeats"])):
-        config["z"] = true_zs[rep]
+        config["z"] = true_partitions[rep]
         if config["sample"]:
             partitions[-1] = config["z"]
 
         for beta in beta_vals:
             config["beta"] = beta
+
             O = gen_obs_func(config)
 
             priors, n_vals = None, np.arange(0, config["N"] + 1, config["update_batch_size"])
@@ -50,5 +62,8 @@ def evaluate_model(config, gen_obs_func, posterior_func):
                 results["map"].append(_map)
                 results["err_mean"].append(error(mean, config["z"]))
                 results["err_map"].append(error(_map, config["z"]))
+
+        if plot_func:
+            plot_func(pd.DataFrame(results), config)
 
     return pd.DataFrame(results)

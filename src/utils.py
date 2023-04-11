@@ -1,6 +1,19 @@
+from datetime import datetime
+
 from itertools import permutations
 
 import numpy as np
+from tqdm import tqdm
+
+
+def log(msg, use_tqdm=True):
+    # log current time to millisecond precision
+    msg = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {msg}"
+    if use_tqdm:
+        tqdm.write(msg)
+    else:
+        print(msg)
+
 
 #  helper function to generate all possible partitions for the case of <= 3 clusters
 # returns a list of length 3^M
