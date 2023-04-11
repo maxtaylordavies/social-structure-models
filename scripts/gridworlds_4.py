@@ -1,4 +1,7 @@
+import time
+
 import numpy as np
+import numpy.ma as ma
 from scipy.stats import mode
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -14,6 +17,7 @@ from src.utils import (
     posterior_mean,
     map_estimate,
     error,
+    log,
 )
 from scripts.discrete_choice import likelihood as dc_likelihood
 
@@ -24,25 +28,34 @@ def generate_observations(config):
         assignments=config["z"],
         group_rewards=R,
     )
-    return [
-        population.generate_trajectories(
+    O = np.zeros((config["N"], config["M"], config["T_max"], 2))
+
+    for n in range(config["N"]):
+        O[n, :, :] = population.generate_trajectories(
             world=config["world"],
             beta=config["beta"],
             start_pos=np.array([5, 5]),
-            max_T=config["T"],
+            max_T=config["T_max"],
         )
-        for _ in range(config["N"])
-    ]
+
+    return O
 
 
 def make_buffer(O, z):
     buffer = {}
-    for obs in O:
-        for (traj, k) in zip(obs, z):
-            for (s, a) in traj:
-                if (s, k) not in buffer:
-                    buffer[(s, k)] = []
-                buffer[(s, k)].append(a)
+    N, M, T, _ = O.shape
+    for n in range(N):
+        for m in range(M):
+            for t in range(T):
+                s, a = O[n, m, t]
+
+                if s == -1:
+                    break
+
+                if (s, z[m]) not in buffer:
+                    buffer[(s, z[m])] = []
+                buffer[(s, z[m])].append(a)
+
     return buffer
 
 
@@ -50,10 +63,12 @@ def likelihood_1(O, z, config):
     if np.sum(z) == 0:
         return -np.inf if config["log"] else 0
 
-    O_hat = np.zeros((config["M"], len(O)))
-    for (n, obs) in enumerate(O):
-        for (m, traj) in enumerate(obs):
-            O_hat[m, n] = mode([a for (s, a) in traj])[0][0]
+    actions = ma.masked_equal(O[:, :, :, 1], -1)
+
+    # print(O.shape)
+    # print(actions.shape)
+
+    O_hat = mode(actions, axis=2)[0].squeeze(axis=2).T
 
     return dc_likelihood(O_hat, z, 4, config["g"], config["log"])
 
@@ -79,11 +94,13 @@ def likelihood_2(O, z, config):
 
 
 def posterior(O, partitions, config, l_func, priors=None):
-    likelihoods = np.array([l_func(O, z, config) for z in partitions])
-
     if priors is None:
         priors = np.array([crp(z, config["c"]) for z in partitions])
 
+    if len(O) == 0:
+        return priors / np.sum(priors)
+
+    likelihoods = np.array([l_func(O, z, config) for z in partitions])
     post = likelihoods + np.log(priors) if config["log"] else np.multiply(likelihoods, priors)
 
     if config["log"]:
@@ -107,14 +124,16 @@ def compare_models(
         for beta in config["betas"]:
             config["beta"] = beta
 
+            log("generating observations...", with_tqdm=True)
             O = generate_observations(config)
-            n_vals = np.arange(0, config["N"] + 1, config["update_batch_size"])
 
             for model, l_func in zip(
-                ["trajectory", "state-action"], [likelihood_1, likelihood_2]
+                ["trajectory", "action"], [likelihood_1, likelihood_2]
             ):
+                log(f"evaluating model {model}...", with_tqdm=True)
                 priors = None
-                for n in n_vals:
+                for n in np.arange(0, config["N"] + 1, config["update_batch_size"]):
+                    log(n, with_tqdm=True)
                     post = posterior(
                         O[max(n - config["update_batch_size"], 0) : n],
                         partitions,
@@ -142,20 +161,20 @@ def compare_models(
 def main():
     config = {
         "M": 10,  # number of agents
-        "N": 10,  # number of observations per agent
-        "T": 10,  # maximum number of time steps per trajectory
+        "N": 20,  # number of observations per agent
+        "T_max": 8,  # maximum number of time steps per trajectory
         "K": 2,  # number of true groups
         "Ltot": 4,  # total number of options available
         "L": 3,  # number of options available per trial
         # "betas": [0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 1, 10],  # boltzmann temperature
-        "betas": [0.01],
+        "betas": [0.01, 0.05, 0.1, 0.5, 1],
         "ratio": 10,  # choice preference ratio
         "g": 2,  # parameter for dirichlet prior over theta
         "c": 1,  # concentration parameter for CRP prior
         "sample": True,  # whether to randomly sample the set of partitions used for evaluation
         "log": True,  # whether to use logs for intermediate probability computations
         "update_batch_size": 1,  # batch size (num observations) for updating the posterior
-        "repeats": 20,  # how many different true partitions to evaluate the model over
+        "repeats": 25,  # how many different true partitions to evaluate the model over
     }
 
     config["R"] = create_reward_functions(config["Ltot"], config["ratio"])

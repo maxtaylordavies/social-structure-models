@@ -29,22 +29,19 @@ class Population:
         self.agents = []
         for i in range(len(self.z)):
             self.agents.append(Agent(self.R[self.z[i]]))
-
-
+    
     def generate_trajectories(self, world: Gridworld, beta: float, start_pos: int, max_T: int):
-        # trajectories = -1 * np.ones((len(self.agents), max_T))
-        trajectories = [[] for _ in range(len(self.agents))]
+        trajs = -1 * np.ones((len(self.agents), max_T, 2), dtype=int)
 
-        for i in range(len(self.agents)):
+        for m in range(len(self.agents)):
             s = start_pos
             for t in range(max_T):
-                a = self.agents[i].get_action(world, s, beta)
-                trajectories[i].append((world.state_to_idx(s), a))
+                a = self.agents[m].get_action(world, s, beta)
+                trajs[m, t] = [world.state_to_idx(s), a]
 
                 s, terminal = world.act(s, a)
                 if terminal:
                     break
-
-        return trajectories
-
+        
+        return trajs
         

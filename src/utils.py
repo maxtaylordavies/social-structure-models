@@ -6,10 +6,10 @@ import numpy as np
 from tqdm import tqdm
 
 
-def log(msg, use_tqdm=True):
+def log(msg, with_tqdm=True):
     # log current time to millisecond precision
     msg = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {msg}"
-    if use_tqdm:
+    if with_tqdm:
         tqdm.write(msg)
     else:
         print(msg)
