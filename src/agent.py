@@ -1,8 +1,8 @@
 import numpy as np
+import numpy.ma as ma
 
 from src.distributions import boltzmann1d
 from src.gridworld import Gridworld
-from src.utils import random_partition
 
 class Agent:
     def __init__(self, r):
@@ -31,7 +31,7 @@ class Population:
             self.agents.append(Agent(self.R[self.z[i]]))
     
     def generate_trajectories(self, world: Gridworld, beta: float, start_pos: int, max_T: int):
-        trajs = -1 * np.ones((len(self.agents), max_T, 2), dtype=int)
+        trajs = -1 * np.ones((len(self.agents), max_T, 2))
 
         for m in range(len(self.agents)):
             s = start_pos

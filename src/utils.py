@@ -84,3 +84,10 @@ def map_estimate(partitions, probs):
 def error(z, z_true):
     z, z_true = normalise(z), normalise(z_true)
     return np.square(z - z_true).mean()
+
+
+# compute the average pairwise distance between a list of points
+def avg_pairwise_distance(p):
+    return np.mean(
+        [np.linalg.norm(p[i] - p[j]) for i in range(len(p)) for j in range(i + 1, len(p))]
+    )

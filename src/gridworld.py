@@ -64,6 +64,9 @@ class Gridworld:
     def state_to_idx(self, s):
         return s[0] * self.width + s[1]
 
+    def idx_to_state(self, idx):
+        return np.array([idx // self.width, idx % self.width])
+
     def is_terminal(self, s):
         return self.state_to_idx(s) in self._reward_map
 
